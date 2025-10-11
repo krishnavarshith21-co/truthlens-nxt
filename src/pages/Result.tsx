@@ -1,12 +1,26 @@
-import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, AlertTriangle, XCircle, Download, Share2 } from "lucide-react";
+import type { VerificationResult } from "@/hooks/useContentVerification";
 
 const Result = () => {
-  const [trustScore] = useState(87);
+  const location = useLocation();
+  const result = (location.state?.result as VerificationResult) || {
+    trustScore: 87,
+    category: "Real & Verified",
+    summary: "This content has been verified against multiple trusted sources and AI detection models with high confidence.",
+    authenticity: "Cross-referenced with established fact-checking databases shows strong evidence of legitimacy.",
+    aiDetection: "No significant signs of AI generation or manipulation detected in the analyzed content.",
+    sources: ["Gemini Analysis"],
+    processingTime: 2.3,
+    sourcesChecked: 15,
+    confidence: "High"
+  };
+  
+  const trustScore = result.trustScore;
   const circumference = 2 * Math.PI * 120;
   const strokeDashoffset = circumference - (trustScore / 100) * circumference;
 
@@ -94,13 +108,13 @@ const Result = () => {
                 </h3>
                 <div className="space-y-4 text-muted-foreground">
                   <p className="leading-relaxed">
-                    <strong className="text-foreground">Summary:</strong> This content has been verified against multiple trusted sources and AI detection models with high confidence.
+                    <strong className="text-foreground">Summary:</strong> {result.summary}
                   </p>
                   <p className="leading-relaxed">
-                    <strong className="text-foreground">Authenticity:</strong> Cross-referenced with established fact-checking databases shows strong evidence of legitimacy.
+                    <strong className="text-foreground">Authenticity:</strong> {result.authenticity}
                   </p>
                   <p className="leading-relaxed">
-                    <strong className="text-foreground">AI Detection:</strong> No significant signs of AI generation or manipulation detected in the analyzed content.
+                    <strong className="text-foreground">AI Detection:</strong> {result.aiDetection}
                   </p>
                 </div>
               </Card>
@@ -126,7 +140,7 @@ const Result = () => {
                 Verified Sources
               </h4>
               <div className="space-y-2">
-                {["Google Fact Check", "NewsAPI.org", "Perplexity AI"].map((source, i) => (
+                {result.sources.map((source, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4 text-primary" />
                     <span className="text-muted-foreground">{source}</span>
@@ -170,15 +184,19 @@ const Result = () => {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Processing Time</span>
-                  <span className="font-medium">2.3s</span>
+                  <span className="font-medium">{result.processingTime}s</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Sources Checked</span>
-                  <span className="font-medium">15</span>
+                  <span className="font-medium">{result.sourcesChecked}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Confidence Level</span>
-                  <span className="font-medium text-trust-high">High</span>
+                  <span className={`font-medium ${
+                    result.confidence === 'High' ? 'text-trust-high' : 
+                    result.confidence === 'Medium' ? 'text-trust-medium' : 
+                    'text-trust-low'
+                  }`}>{result.confidence}</span>
                 </div>
               </div>
             </Card>

@@ -1,15 +1,33 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Upload, Link as LinkIcon, FileText, Image, Video, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useContentVerification } from "@/hooks/useContentVerification";
 
 const VerificationSection = () => {
+  const [textInput, setTextInput] = useState("");
+  const [selectedType, setSelectedType] = useState("text");
+  const { verifyContent, isLoading } = useContentVerification();
+  const navigate = useNavigate();
   const contentTypes = [
-    { icon: FileText, label: "Text", color: "text-primary" },
-    { icon: Image, label: "Image", color: "text-secondary" },
-    { icon: Video, label: "Video", color: "text-accent" },
-    { icon: Mic, label: "Audio", color: "text-trust-medium" },
+    { icon: FileText, label: "text", color: "text-primary" },
+    { icon: Image, label: "image", color: "text-secondary" },
+    { icon: Video, label: "video", color: "text-accent" },
+    { icon: Mic, label: "audio", color: "text-trust-medium" },
   ];
+
+  const handleAnalyze = async () => {
+    if (!textInput.trim()) {
+      return;
+    }
+
+    const result = await verifyContent(textInput, selectedType);
+    if (result) {
+      navigate('/result', { state: { result } });
+    }
+  };
 
   return (
     <section id="verify" className="py-20 px-4">
@@ -44,10 +62,13 @@ const VerificationSection = () => {
                 {contentTypes.map((type) => (
                   <button
                     key={type.label}
-                    className="glass-card p-6 rounded-2xl hover:glow-primary transition-all duration-300 group"
+                    onClick={() => setSelectedType(type.label)}
+                    className={`glass-card p-6 rounded-2xl hover:glow-primary transition-all duration-300 group ${
+                      selectedType === type.label ? 'ring-2 ring-primary' : ''
+                    }`}
                   >
                     <type.icon className={`w-8 h-8 mx-auto mb-3 ${type.color} group-hover:scale-110 transition-transform`} />
-                    <p className="font-medium text-sm">{type.label}</p>
+                    <p className="font-medium text-sm capitalize">{type.label}</p>
                   </button>
                 ))}
               </div>
@@ -64,6 +85,8 @@ const VerificationSection = () => {
               <div className="glass-card p-6 rounded-2xl">
                 <label className="block text-sm font-medium mb-3">Paste URL or Text</label>
                 <textarea
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
                   placeholder="Paste a news article URL, social media post, or any text you want to verify..."
                   className="w-full h-32 bg-background/50 border border-border rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
@@ -74,10 +97,12 @@ const VerificationSection = () => {
           {/* Action Button */}
           <div className="mt-8 flex justify-center">
             <Button 
-              size="lg" 
-              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105"
+              size="lg"
+              onClick={handleAnalyze}
+              disabled={isLoading || !textInput.trim()}
+              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 disabled:opacity-50"
             >
-              Analyze Content
+              {isLoading ? 'Analyzing...' : 'Analyze Content'}
             </Button>
           </div>
         </Card>
