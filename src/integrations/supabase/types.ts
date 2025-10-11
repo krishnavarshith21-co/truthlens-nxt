@@ -14,7 +14,152 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      badges: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          points_required: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          points_required?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          points_required?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          display_name: string | null
+          email: string | null
+          id: string
+          total_verifications: number | null
+          trust_points: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          id: string
+          total_verifications?: number | null
+          trust_points?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          total_verifications?: number | null
+          trust_points?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_badges: {
+        Row: {
+          badge_id: string | null
+          earned_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          badge_id?: string | null
+          earned_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          badge_id?: string | null
+          earned_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_badges_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      verifications: {
+        Row: {
+          content_text: string | null
+          content_type: string
+          content_url: string | null
+          created_at: string | null
+          detailed_explanation: string | null
+          id: string
+          is_ai_generated: boolean | null
+          related_articles: Json | null
+          summary: string | null
+          trust_score: number | null
+          user_id: string | null
+        }
+        Insert: {
+          content_text?: string | null
+          content_type: string
+          content_url?: string | null
+          created_at?: string | null
+          detailed_explanation?: string | null
+          id?: string
+          is_ai_generated?: boolean | null
+          related_articles?: Json | null
+          summary?: string | null
+          trust_score?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          content_text?: string | null
+          content_type?: string
+          content_url?: string | null
+          created_at?: string | null
+          detailed_explanation?: string | null
+          id?: string
+          is_ai_generated?: boolean | null
+          related_articles?: Json | null
+          summary?: string | null
+          trust_score?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
