@@ -4,43 +4,81 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
 import { Shield, Award, TrendingUp, History } from "lucide-react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading, signOut } = useAuth();
+  const [verifications, setVerifications] = useState<any[]>([]);
+  const [stats, setStats] = useState({ trustScore: 0, verified: 0, badges: 0, points: 0 });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUser(session.user);
-      }
-      setLoading(false);
-    });
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUser(session.user);
-      }
-    });
+  useEffect(() => {
+    if (user) {
+      loadVerifications();
+    }
+  }, [user]);
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+  const loadVerifications = async () => {
+    if (!user) return;
+    
+    try {
+      const q = query(
+        collection(db, 'verifications'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(5)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const verificationsData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          result: data.result || { trustScore: 0, category: '' }
+        };
+      });
+      
+      setVerifications(verificationsData);
+      
+      // Calculate stats
+      const verified = verificationsData.length;
+      const avgTrustScore = verificationsData.reduce((acc, v) => acc + (v.result?.trustScore || 0), 0) / (verified || 1);
+      
+      setStats({
+        trustScore: Math.round(avgTrustScore),
+        verified,
+        badges: Math.floor(verified / 10),
+        points: verified * 50
+      });
+    } catch (error) {
+      console.error('Error loading verifications:', error);
+    }
+  };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate("/");
   };
 
-  if (loading) {
+  if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
+
+  const getCategoryEmoji = (category: string) => {
+    if (category.includes('Real')) return '🟢';
+    if (category.includes('Suspicious')) return '🟠';
+    return '🔴';
+  };
 
   return (
     <div className="min-h-screen">
@@ -69,7 +107,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Trust Score</p>
-                  <p className="text-2xl font-bold">95%</p>
+                  <p className="text-2xl font-bold">{stats.trustScore}%</p>
                 </div>
               </div>
             </Card>
@@ -81,7 +119,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Verified</p>
-                  <p className="text-2xl font-bold">24</p>
+                  <p className="text-2xl font-bold">{stats.verified}</p>
                 </div>
               </div>
             </Card>
@@ -93,7 +131,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Badges</p>
-                  <p className="text-2xl font-bold">3</p>
+                  <p className="text-2xl font-bold">{stats.badges}</p>
                 </div>
               </div>
             </Card>
@@ -105,7 +143,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Points</p>
-                  <p className="text-2xl font-bold">1,250</p>
+                  <p className="text-2xl font-bold">{stats.points}</p>
                 </div>
               </div>
             </Card>
@@ -115,38 +153,30 @@ const Dashboard = () => {
           <Card className="glass-card p-8">
             <h2 className="text-2xl font-bold mb-6">Recent Verifications</h2>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-background/50">
-                <div>
-                  <p className="font-medium">AI-generated landscape image</p>
-                  <p className="text-sm text-muted-foreground">2 hours ago</p>
+              {verifications.length > 0 ? verifications.map((verification) => (
+                <div key={verification.id} className="flex items-center justify-between p-4 rounded-xl bg-background/50">
+                  <div>
+                    <p className="font-medium">{verification.content?.slice(0, 50)}...</p>
+                    <p className="text-sm text-muted-foreground">
+                      {verification.createdAt?.toDate?.()?.toLocaleString() || 'Recently'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={
+                      verification.result?.trustScore > 70 ? 'text-trust-high' :
+                      verification.result?.trustScore > 40 ? 'text-trust-medium' :
+                      'text-trust-low'
+                    }>
+                      {verification.result?.trustScore}% Real
+                    </span>
+                    <span className="text-2xl">{getCategoryEmoji(verification.result?.category || '')}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-trust-low">25% Real</span>
-                  <span className="text-2xl">🔴</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 rounded-xl bg-background/50">
-                <div>
-                  <p className="font-medium">News article about climate change</p>
-                  <p className="text-sm text-muted-foreground">5 hours ago</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-trust-high">92% Real</span>
-                  <span className="text-2xl">🟢</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-xl bg-background/50">
-                <div>
-                  <p className="font-medium">Social media video claim</p>
-                  <p className="text-sm text-muted-foreground">1 day ago</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-trust-medium">55% Real</span>
-                  <span className="text-2xl">🟠</span>
-                </div>
-              </div>
+              )) : (
+                <p className="text-center text-muted-foreground py-8">
+                  No verifications yet. Start by verifying some content!
+                </p>
+              )}
             </div>
           </Card>
         </div>

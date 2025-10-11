@@ -4,13 +4,18 @@ import { Upload, Link as LinkIcon, FileText, Image, Video, Mic } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useContentVerification } from "@/hooks/useContentVerification";
+import { Input } from "@/components/ui/input";
+import { useFirebaseVerification } from "@/hooks/useFirebaseVerification";
+import { useToast } from "@/hooks/use-toast";
 
 const VerificationSection = () => {
   const [textInput, setTextInput] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [selectedType, setSelectedType] = useState("text");
-  const { verifyContent, isLoading } = useContentVerification();
+  const { verifyContent, isLoading } = useFirebaseVerification();
+  const { toast } = useToast();
   const navigate = useNavigate();
+  
   const contentTypes = [
     { icon: FileText, label: "text", color: "text-primary" },
     { icon: Image, label: "image", color: "text-secondary" },
@@ -18,14 +23,34 @@ const VerificationSection = () => {
     { icon: Mic, label: "audio", color: "text-trust-medium" },
   ];
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      
+      if (selectedFile.type.startsWith('image/')) {
+        setSelectedType('image');
+      } else if (selectedFile.type.startsWith('video/')) {
+        setSelectedType('video');
+      } else if (selectedFile.type.startsWith('audio/')) {
+        setSelectedType('audio');
+      }
+    }
+  };
+
   const handleAnalyze = async () => {
-    if (!textInput.trim()) {
+    if (!textInput.trim() && !file) {
+      toast({
+        title: "Error",
+        description: "Please enter content or upload a file",
+        variant: "destructive"
+      });
       return;
     }
 
-    const result = await verifyContent(textInput, selectedType);
+    const result = await verifyContent(file || textInput, selectedType);
     if (result) {
-      navigate('/result', { state: { result } });
+      navigate('/result', { state: { result, content: file?.name || textInput } });
     }
   };
 
@@ -75,9 +100,20 @@ const VerificationSection = () => {
 
               {/* Drop zone */}
               <div className="border-2 border-dashed border-primary/30 rounded-2xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 cursor-pointer group">
-                <Upload className="w-16 h-16 mx-auto mb-4 text-primary/50 group-hover:text-primary group-hover:scale-110 transition-all" />
-                <p className="text-lg font-medium mb-2">Drag & Drop or Click to Upload</p>
-                <p className="text-sm text-muted-foreground">Support for images, videos, audio, and documents</p>
+                <Input
+                  type="file"
+                  id="file-upload"
+                  accept="image/*,video/*,audio/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Upload className="w-16 h-16 mx-auto mb-4 text-primary/50 group-hover:text-primary group-hover:scale-110 transition-all" />
+                  <p className="text-lg font-medium mb-2">
+                    {file ? file.name : "Drag & Drop or Click to Upload"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Support for images, videos, audio, and documents</p>
+                </label>
               </div>
             </TabsContent>
 
@@ -99,7 +135,7 @@ const VerificationSection = () => {
             <Button 
               size="lg"
               onClick={handleAnalyze}
-              disabled={isLoading || !textInput.trim()}
+              disabled={isLoading || (!textInput.trim() && !file)}
               className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 disabled:opacity-50"
             >
               {isLoading ? 'Analyzing...' : 'Analyze Content'}
