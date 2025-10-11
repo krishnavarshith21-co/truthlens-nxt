@@ -5,9 +5,10 @@ import Footer from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
+import { db, isDemoMode } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
 import { Shield, Award, TrendingUp, History } from "lucide-react";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -29,6 +30,49 @@ const Dashboard = () => {
 
   const loadVerifications = async () => {
     if (!user) return;
+    
+    // Demo mode - use mock data
+    if (isDemoMode) {
+      const mockVerifications = [
+        {
+          id: '1',
+          content: 'AI-generated landscape image',
+          contentType: 'image',
+          result: { trustScore: 25, category: 'Fake or AI-Generated' },
+          createdAt: { toDate: () => new Date(Date.now() - 2 * 60 * 60 * 1000) }
+        },
+        {
+          id: '2',
+          content: 'News article about climate change',
+          contentType: 'text',
+          result: { trustScore: 92, category: 'Real & Verified' },
+          createdAt: { toDate: () => new Date(Date.now() - 5 * 60 * 60 * 1000) }
+        },
+        {
+          id: '3',
+          content: 'Social media video claim',
+          contentType: 'video',
+          result: { trustScore: 55, category: 'Suspicious' },
+          createdAt: { toDate: () => new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        }
+      ];
+      
+      setVerifications(mockVerifications);
+      
+      const verified = mockVerifications.length;
+      const avgTrustScore = mockVerifications.reduce((acc, v) => acc + (v.result?.trustScore || 0), 0) / verified;
+      
+      setStats({
+        trustScore: Math.round(avgTrustScore),
+        verified,
+        badges: Math.floor(verified / 10) + 1,
+        points: verified * 50
+      });
+      return;
+    }
+    
+    // Real Firebase mode
+    if (!db) return;
     
     try {
       const q = query(
@@ -71,7 +115,7 @@ const Dashboard = () => {
   };
 
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return <LoadingScreen message="Loading your dashboard..." />;
   }
 
   const getCategoryEmoji = (category: string) => {

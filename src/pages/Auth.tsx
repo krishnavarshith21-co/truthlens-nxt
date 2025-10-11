@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, isDemoMode } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,6 +88,12 @@ const Auth = () => {
           <Shield className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-bold text-gradient">VeriFy.AI</h1>
         </div>
+
+        {isDemoMode && (
+          <div className="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-sm">
+            <p className="text-yellow-200">🎮 Demo Mode - Use any email/password to try the app!</p>
+          </div>
+        )}
 
         <Tabs defaultValue="signin" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">

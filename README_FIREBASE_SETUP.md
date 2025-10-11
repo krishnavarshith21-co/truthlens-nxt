@@ -1,13 +1,19 @@
 # VeriFy.AI - Firebase Setup Guide
 
-## 🔥 Firebase Configuration
+## 🚀 Quick Start (Demo Mode)
 
-### 1. Create Firebase Project
+The app works immediately in **Demo Mode** without any configuration! 
+
+- ✅ Use any email/password to sign in
+- ✅ Verify content with mock AI analysis
+- ✅ Test all features instantly
+- ⚠️ Data won't persist (no database)
+- ⚠️ Mock AI results (not real verification)
+
+## 🔥 Production Setup (Real APIs)
+
+### Step 1: Firebase Configuration
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click "Add project" and follow the steps
-3. Enable Google Analytics (optional)
-
-### 2. Enable Authentication
 1. In Firebase Console, go to **Authentication**
 2. Click **Get Started**
 3. Enable **Email/Password** sign-in method
