@@ -1,11 +1,24 @@
 import { Shield, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/');
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+  };
 
   const navItems = [
     { label: "Home", href: "/" },
@@ -54,13 +67,20 @@ const Navigation = () => {
             ))}
           </div>
 
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Link to="/auth">
-              <Button className="bg-gradient-primary hover:opacity-90 glow-primary rounded-xl">
-                Get Started
-              </Button>
-            </Link>
+          {/* Auth Controls */}
+          <div className="hidden md:flex items-center gap-3">
+            {user ? (
+              <>
+                <span className="text-sm text-muted-foreground hidden lg:inline">{user.email}</span>
+                <Button variant="outline" onClick={handleLogout}>Sign Out</Button>
+              </>
+            ) : (
+              <Link to="/auth">
+                <Button className="bg-gradient-primary hover:opacity-90 glow-primary rounded-xl">
+                  Get Started
+                </Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -97,11 +117,17 @@ const Navigation = () => {
                   </Link>
                 )
               ))}
-              <Link to="/auth" onClick={() => setIsOpen(false)}>
-                <Button className="bg-gradient-primary hover:opacity-90 w-full rounded-xl">
-                  Get Started
+              {user ? (
+                <Button variant="outline" className="w-full" onClick={() => { setIsOpen(false); handleLogout(); }}>
+                  Sign Out
                 </Button>
-              </Link>
+              ) : (
+                <Link to="/auth" onClick={() => setIsOpen(false)}>
+                  <Button className="bg-gradient-primary hover:opacity-90 w-full rounded-xl">
+                    Get Started
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         )}

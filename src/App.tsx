@@ -12,6 +12,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import History from "./pages/History";
 import NotFound from "./pages/NotFound";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -24,12 +25,14 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/history" element={<History />} />
+          </Route>
           <Route path="/result" element={<Result />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
-          <Route path="/history" element={<History />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

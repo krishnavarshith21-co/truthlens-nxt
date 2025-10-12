@@ -43,9 +43,10 @@ const Auth = () => {
         description: "Check your email for the confirmation link.",
       });
     } catch (error: any) {
+      console.error('Sign up error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || 'Unable to sign up',
         variant: "destructive"
       });
     }
@@ -70,9 +71,10 @@ const Auth = () => {
       });
       navigate("/dashboard");
     } catch (error: any) {
+      console.error('Sign in error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || 'Invalid credentials',
         variant: "destructive"
       });
     }
@@ -91,9 +93,10 @@ const Auth = () => {
 
       if (error) throw error;
     } catch (error: any) {
+      console.error('Google sign in error:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || 'Google sign-in failed. Is Google provider enabled?',
         variant: "destructive"
       });
       setLoading(false);
