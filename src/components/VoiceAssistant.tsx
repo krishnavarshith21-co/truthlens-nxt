@@ -3,23 +3,20 @@ import { Mic, MicOff } from 'lucide-react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from './ui/alert-dialog';
 
 export const VoiceAssistant = () => {
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
   const [isSupported, setIsSupported] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [micPermission, setMicPermission] = useState<'granted' | 'prompt' | 'denied' | null>(null);
-  const [showPermissionHelp, setShowPermissionHelp] = useState(false);
-  const [showInitialPrompt, setShowInitialPrompt] = useState(false);
+  const [micAllowed, setMicAllowed] = useState(false);
+  const [permissionError, setPermissionError] = useState('');
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
       
       const utterance = new SpeechSynthesisUtterance(text);
@@ -27,19 +24,9 @@ export const VoiceAssistant = () => {
       utterance.pitch = 1;
       utterance.volume = 1;
       
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-      };
-      
-      utterance.onend = () => {
-        console.log('Speech ended');
-        setIsSpeaking(false);
-      };
-      
-      utterance.onerror = (event) => {
-        console.error('Speech error:', event);
-        setIsSpeaking(false);
-      };
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
       
       window.speechSynthesis.speak(utterance);
     }
@@ -48,7 +35,6 @@ export const VoiceAssistant = () => {
   const handleVoiceCommand = (command: string) => {
     const lowerCommand = command.toLowerCase();
     
-    // Navigation commands
     if (lowerCommand.includes('go home') || lowerCommand.includes('home page')) {
       speak("Taking you to the home page.");
       navigate('/');
@@ -64,207 +50,178 @@ export const VoiceAssistant = () => {
     } else if (lowerCommand.includes('contact') || lowerCommand.includes('get in touch')) {
       speak("Opening the contact page.");
       navigate('/contact');
-    }
-    
-    // Verification commands
-    else if (lowerCommand.includes('verify') || lowerCommand.includes('check') || lowerCommand.includes('analyze')) {
+    } else if (lowerCommand.includes('verify') || lowerCommand.includes('check') || lowerCommand.includes('analyze')) {
       if (location.pathname !== '/') {
         speak("Navigating to verification page. Please upload or paste the content you want to verify.");
         navigate('/?scrollTo=verify');
       } else {
         speak("Please upload a file or paste text in the verification section below.");
-        // Scroll to verification section
         const verifySection = document.getElementById('verify');
         if (verifySection) {
           verifySection.scrollIntoView({ behavior: 'smooth' });
         }
       }
-    }
-    
-    // Help commands
-    else if (lowerCommand.includes('help') || lowerCommand.includes('what can you do')) {
+    } else if (lowerCommand.includes('help') || lowerCommand.includes('what can you do')) {
       speak("I can help you verify content, navigate to different pages, or answer questions about VeriFy AI. Try saying things like: verify this content, go to dashboard, or how does it work.");
     } else if (lowerCommand.includes('how does') || lowerCommand.includes('how it works')) {
       speak("VeriFy AI uses advanced artificial intelligence to analyze text, images, videos, and audio. We check authenticity, detect AI-generated content, and verify information against trusted sources. You can upload any content, and we'll give you a trust score with detailed analysis.");
-    }
-    
-    // Default response
-    else {
+    } else {
       speak("I'm not sure I understood that. You can ask me to verify content, navigate to different pages, or say help for more options.");
     }
   };
 
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      setIsSupported(true);
-      try {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        const recognitionInstance = new SpeechRecognition();
-        recognitionInstance.continuous = false;
-        recognitionInstance.interimResults = false;
-        recognitionInstance.lang = 'en-US';
-
-        recognitionInstance.onstart = () => {
-          console.log('Voice recognition started');
-          if (location.pathname === '/') {
-            speak("Hi! I'm your VeriFy AI assistant. You can ask me to verify content, check the dashboard, or learn about VeriFy. What would you like to do?");
-          } else {
-            speak("I'm listening. How can I help you?");
-          }
-        };
-
-        recognitionInstance.onresult = (event: any) => {
-          const transcript = Array.from(event.results)
-            .map((result: any) => result[0].transcript)
-            .join('');
-          
-          console.log('Voice input:', transcript);
-          handleVoiceCommand(transcript);
-        };
-
-        recognitionInstance.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          setIsListening(false);
-          if (event.error === 'not-allowed') {
-            toast({
-              title: "Microphone Access Denied",
-              description: "Please allow microphone access to use voice assistant",
-              variant: "destructive"
-            });
-            setShowPermissionHelp(true);
-          } else if (event.error === 'audio-capture') {
-            toast({
-              title: "No Microphone Audio",
-              description: "Your browser could not capture audio. Check mic connection and permissions.",
-              variant: "destructive"
-            });
-            setShowPermissionHelp(true);
-          }
-        };
-
-        recognitionInstance.onend = () => {
-          setIsListening(false);
-        };
-
-        setRecognition(recognitionInstance);
-      } catch (e) {
-        console.error('Speech recognition not supported:', e);
-        setIsSupported(false);
-        toast({
-          title: 'Speech recognition not supported',
-          description: 'Your browser may not support the Web Speech API. Try Chrome or Edge.',
-          variant: 'destructive'
-        });
-      }
-    } else {
+  const initSpeechRecognition = () => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       setIsSupported(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast, location.pathname]);
 
-  // Track browser microphone permission state & show first-load prompt
-  useEffect(() => {
-    const nav: any = navigator as any;
-    if (nav?.permissions?.query) {
-      try {
-        nav.permissions.query({ name: 'microphone' as any }).then((status: any) => {
-          setMicPermission(status.state);
-          if ((status.state === 'prompt' || status.state === 'denied') && !sessionStorage.getItem('va_mic_prompted')) {
-            setShowInitialPrompt(true);
-          }
-          status.onchange = () => {
-            setMicPermission(status.state);
-            if (status.state === 'granted') {
-              setShowPermissionHelp(false);
-              setShowInitialPrompt(false);
-            }
-          };
-        }).catch(() => {/* ignore */});
-      } catch { /* ignore */ }
-    }
-  }, []);
-
-
-  const requestMicrophonePermission = async () => {
+    setIsSupported(true);
+    
     try {
-      // Request microphone access first
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Stop the stream immediately - we just needed permission
-      stream.getTracks().forEach(track => track.stop());
-      setMicPermission('granted');
-      setShowPermissionHelp(false);
-      return true;
-    } catch (error: any) {
-      console.error('Microphone permission error:', error);
-      const name = error?.name || '';
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        setMicPermission('denied');
-        toast({
-          title: "Microphone Permission Required",
-          description: "Please allow microphone access in your browser settings to use voice assistant.",
-          variant: "destructive"
-        });
-        setShowPermissionHelp(true);
-      } else if (name === 'NotFoundError') {
-        toast({
-          title: "No Microphone Found",
-          description: "Please connect a microphone to use voice assistant.",
-          variant: "destructive"
-        });
-      } else if (name === 'NotReadableError') {
-        toast({
-          title: "Microphone In Use",
-          description: "Your microphone is being used by another application. Please close it and try again.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Microphone Error",
-          description: "Could not access microphone. Please check your device settings.",
-          variant: "destructive"
-        });
-      }
-      return false;
-    }
-  };
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'en-US';
 
-  const retryAccessAndStart = async () => {
-    const ok = await requestMicrophonePermission();
-    sessionStorage.setItem('va_mic_prompted', '1');
-    if (ok && recognition) {
-      try {
-        recognition.start();
+      recognitionInstance.onstart = () => {
+        console.log('Voice recognition started');
         setIsListening(true);
-        toast({ title: 'Listening', description: 'Microphone access granted' });
-      } catch (e) {
-        console.error('Failed to start after permission:', e);
-      }
+        if (location.pathname === '/') {
+          speak("Hi! I'm your VeriFy AI assistant. You can ask me to verify content, check the dashboard, or learn about VeriFy. What would you like to do?");
+        } else {
+          speak("I'm listening. How can I help you?");
+        }
+      };
+
+      recognitionInstance.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join('');
+        
+        console.log('Voice input:', transcript);
+        handleVoiceCommand(transcript);
+      };
+
+      recognitionInstance.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        
+        if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+          setMicAllowed(false);
+          setPermissionError('Microphone access denied or blocked.');
+        }
+      };
+
+      recognitionInstance.onend = () => {
+        console.log('Voice recognition ended');
+        setIsListening(false);
+      };
+
+      setRecognition(recognitionInstance);
+      console.log('Speech recognition initialized successfully');
+    } catch (e) {
+      console.error('Speech recognition initialization failed:', e);
+      setIsSupported(false);
+      toast({
+        title: 'Speech recognition not supported',
+        description: 'Your browser may not support the Web Speech API. Try Chrome or Edge.',
+        variant: 'destructive'
+      });
     }
   };
-  
-  const allowFromDialog = async () => {
-    sessionStorage.setItem('va_mic_prompted', '1');
-    const ok = await requestMicrophonePermission();
-    setShowInitialPrompt(false);
-    if (!ok) setShowPermissionHelp(true);
-  };
-  
-  const openMicSettings = () => {
-    const ua = navigator.userAgent.toLowerCase();
+
+  const checkMicPermission = async () => {
     try {
-      if (ua.includes('chrome') || ua.includes('edg')) {
-        window.open('chrome://settings/content/microphone', '_blank');
-      } else if (ua.includes('firefox')) {
-        window.open('about:preferences#privacy', '_blank');
+      const nav: any = navigator as any;
+      if (nav?.permissions?.query) {
+        const status = await nav.permissions.query({ name: 'microphone' });
+        console.log('Mic permission status:', status.state);
+        
+        if (status.state === 'granted') {
+          setMicAllowed(true);
+          setPermissionError('');
+          initSpeechRecognition();
+        } else if (status.state === 'prompt') {
+          setMicAllowed(false);
+          setPermissionError('Please allow microphone access to use voice assistant.');
+        } else {
+          setMicAllowed(false);
+          setPermissionError('Microphone blocked for this site.');
+        }
+
+        status.onchange = () => {
+          console.log('Mic permission changed:', status.state);
+          checkMicPermission();
+        };
+      } else {
+        // Fallback if permissions API not available
+        setMicAllowed(false);
+        setPermissionError('Click to allow microphone access.');
       }
-    } catch {}
+    } catch (err) {
+      console.error('Permission check failed:', err);
+      setMicAllowed(false);
+      setPermissionError('Click to request microphone access.');
+    }
+  };
+
+  const requestMicAccess = async () => {
+    try {
+      console.log('Requesting microphone access...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      
+      setMicAllowed(true);
+      setPermissionError('');
+      
+      toast({
+        title: "Microphone Access Granted",
+        description: "Voice assistant is now active!",
+      });
+      
+      // Initialize speech recognition after permission granted
+      initSpeechRecognition();
+    } catch (err: any) {
+      console.error('Microphone access denied:', err);
+      setMicAllowed(false);
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setPermissionError('Microphone access denied. Click the 🔒 icon near your address bar → Allow Microphone.');
+      } else if (err.name === 'NotFoundError') {
+        setPermissionError('No microphone found. Please connect a microphone.');
+      } else {
+        setPermissionError('Could not access microphone. Please check your device settings.');
+      }
+      
+      toast({
+        title: "Microphone Access Denied",
+        description: "Please allow microphone access to use voice assistant.",
+        variant: "destructive"
+      });
+    }
   };
 
   const toggleListening = async () => {
-    if (!isSupported || !recognition) {
+    if (!isSupported) {
       toast({
         title: "Not Supported",
         description: "Voice recognition is not supported in your browser. Try Chrome or Edge.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!micAllowed) {
+      await requestMicAccess();
+      return;
+    }
+
+    if (!recognition) {
+      toast({
+        title: "Voice Assistant Not Ready",
+        description: "Please try again.",
         variant: "destructive"
       });
       return;
@@ -275,15 +232,8 @@ export const VoiceAssistant = () => {
       window.speechSynthesis.cancel();
       setIsListening(false);
     } else {
-      // Request microphone permission first
-      const hasPermission = await requestMicrophonePermission();
-      if (!hasPermission) {
-        return;
-      }
-
       try {
         recognition.start();
-        setIsListening(true);
       } catch (error) {
         console.error('Failed to start recognition:', error);
         toast({
@@ -295,13 +245,40 @@ export const VoiceAssistant = () => {
     }
   };
 
-  if (!isSupported) {
-    return null; // Hide voice assistant if not supported
+  // Check permission on mount
+  useEffect(() => {
+    checkMicPermission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!isSupported && micAllowed) {
+    return null;
   }
 
   return (
     <div className="fixed bottom-8 right-8 z-50">
       <div className="relative">
+        {/* Error message when blocked */}
+        {!micAllowed && permissionError && (
+          <div className="absolute bottom-full right-0 mb-2 bg-destructive text-destructive-foreground p-3 rounded-lg shadow-2xl animate-fade-in max-w-xs">
+            <p className="text-sm font-medium mb-2">{permissionError}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={requestMicAccess}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1 rounded text-sm font-medium transition-colors"
+              >
+                Retry Access
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-secondary hover:bg-secondary/90 text-secondary-foreground px-3 py-1 rounded text-sm font-medium transition-colors"
+              >
+                Reload
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Voice Assistant Button */}
         <Button
           onClick={toggleListening}
@@ -309,9 +286,19 @@ export const VoiceAssistant = () => {
           className={`rounded-full w-16 h-16 shadow-2xl transition-all duration-300 ${
             isListening || isSpeaking
               ? 'bg-gradient-to-r from-primary to-purple-600 animate-pulse scale-110' 
-              : 'bg-primary hover:scale-105'
+              : micAllowed 
+              ? 'bg-primary hover:scale-105'
+              : 'bg-gray-400 hover:scale-105'
           }`}
-          title={isListening ? "Listening..." : isSpeaking ? "Speaking..." : "Start voice assistant"}
+          title={
+            !micAllowed 
+              ? "Click to enable microphone" 
+              : isListening 
+              ? "Listening..." 
+              : isSpeaking 
+              ? "Speaking..." 
+              : "Start voice assistant"
+          }
         >
           {isListening ? (
             <Mic className="h-6 w-6 animate-pulse" />
@@ -320,8 +307,8 @@ export const VoiceAssistant = () => {
           )}
         </Button>
 
-        {/* Animated Rings */}
-        {(isListening || isSpeaking) && (
+        {/* Animated Rings when active */}
+        {(isListening || isSpeaking) && micAllowed && (
           <>
             <div className="absolute -top-2 -right-2 w-20 h-20 bg-primary/20 rounded-full animate-ping" />
             <div className="absolute -top-4 -right-4 w-24 h-24 bg-purple-500/10 rounded-full animate-ping" style={{ animationDelay: '0.5s' }} />
@@ -329,71 +316,15 @@ export const VoiceAssistant = () => {
           </>
         )}
 
-        {/* Status Tooltip */}
-        {(isListening || isSpeaking) && (
+        {/* Status Tooltip when active */}
+        {(isListening || isSpeaking) && micAllowed && (
           <div className="absolute bottom-full right-0 mb-2 bg-background/95 backdrop-blur-sm border border-primary/20 px-4 py-2 rounded-lg shadow-lg animate-fade-in whitespace-nowrap">
             <p className="text-sm font-medium">
               {isListening ? '🎤 Listening...' : '🔊 Speaking...'}
             </p>
           </div>
         )}
-
-        {/* Permission helper when blocked */}
-        {micPermission === 'denied' && !isListening && !isSpeaking && (
-          <div className="absolute bottom-full right-0 mb-2 bg-destructive text-destructive-foreground px-3 py-2 rounded-lg shadow-lg animate-fade-in">
-            <div className="flex items-center gap-3">
-              <p className="text-sm font-medium">Microphone blocked for this site.</p>
-              <button
-                onClick={retryAccessAndStart}
-                className="underline text-sm hover:opacity-90"
-              >
-                Retry access
-              </button>
-              <button
-                onClick={() => setShowPermissionHelp(true)}
-                className="underline text-sm hover:opacity-90"
-              >
-                Help
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-
-      <AlertDialog open={showPermissionHelp} onOpenChange={setShowPermissionHelp}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Enable your microphone</AlertDialogTitle>
-            <AlertDialogDescription>
-              1. Click the padlock icon near the address bar.
-              2. Open Site settings.
-              3. Set Microphone to "Allow" for this site.
-              4. Return here and reload the page.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowPermissionHelp(false)}>Close</AlertDialogCancel>
-            <AlertDialogAction onClick={() => openMicSettings()}>Open settings</AlertDialogAction>
-            <AlertDialogAction onClick={() => window.location.reload()}>Reload</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* First load permission request */}
-      <AlertDialog open={showInitialPrompt && micPermission !== 'granted'} onOpenChange={setShowInitialPrompt}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>VeriFy.AI needs your microphone</AlertDialogTitle>
-            <AlertDialogDescription>
-              Allow microphone access to control the app with your voice and hear spoken results. You can always change this later in your browser settings.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { sessionStorage.setItem('va_mic_prompted','1'); setShowInitialPrompt(false); }}>Not now</AlertDialogCancel>
-            <AlertDialogAction onClick={allowFromDialog}>Allow microphone</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };
