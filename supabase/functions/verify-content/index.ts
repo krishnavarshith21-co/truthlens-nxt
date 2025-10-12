@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { content, contentType } = await req.json();
+    const { content, contentType, isBase64Image, mimeType } = await req.json();
     
     if (!content) {
       throw new Error('Content is required');
@@ -20,6 +20,35 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
+    }
+
+    const startTime = Date.now();
+
+    // Prepare message content based on type
+    let userMessage;
+    if (isBase64Image && mimeType) {
+      // For images, use vision capabilities
+      userMessage = {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Analyze this ${contentType || 'image'} for authenticity, AI generation signs, and verify its content. Provide a detailed verification analysis.`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:${mimeType};base64,${content}`
+            }
+          }
+        ]
+      };
+    } else {
+      // For text content
+      userMessage = {
+        role: 'user',
+        content: `Verify this ${contentType || 'text'} content:\n\n${content}`
+      };
     }
 
     // Call Gemini through Lovable AI Gateway
@@ -36,21 +65,20 @@ serve(async (req) => {
             role: 'system',
             content: `You are an expert content verification AI. Analyze content for authenticity, detect AI-generated content, and fact-check claims. 
             
-            Respond with a JSON object containing:
+            For images: Describe what you see, check for manipulation signs, assess if it's AI-generated, and verify the content's authenticity.
+            For text: Analyze claims, detect AI writing patterns, and verify factual accuracy.
+            
+            Respond ONLY with a valid JSON object (no markdown) containing:
             - trustScore (number 0-100): Overall trust rating
             - category (string): "Real & Verified", "Suspicious", or "Fake or AI-Generated"
-            - summary (string): Brief explanation of findings
+            - summary (string): Brief explanation of findings (2-3 sentences)
             - authenticity (string): Assessment of content authenticity
             - aiDetection (string): Analysis of AI generation signs
-            - sources (array): List of verification methods used
-            - processingTime (number): Processing time in seconds
-            - sourcesChecked (number): Number of sources verified
+            - sources (array): List of verification methods used (e.g., ["Visual Analysis", "Pattern Recognition", "Gemini Vision API"])
+            - sourcesChecked (number): Number of verification checks performed
             - confidence (string): "High", "Medium", or "Low"`
           },
-          {
-            role: 'user',
-            content: `Verify this ${contentType || 'text'} content:\n\n${content}`
-          }
+          userMessage
         ],
       }),
     });
@@ -68,24 +96,39 @@ serve(async (req) => {
       throw new Error('No response from AI');
     }
 
+    const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
     // Parse the JSON response from Gemini
     let analysis;
     try {
       // Extract JSON from markdown code blocks if present
       const jsonMatch = analysisText.match(/```json\n([\s\S]*?)\n```/) || 
                        analysisText.match(/\{[\s\S]*\}/);
-      analysis = JSON.parse(jsonMatch ? jsonMatch[1] || jsonMatch[0] : analysisText);
+      const parsedData = JSON.parse(jsonMatch ? jsonMatch[1] || jsonMatch[0] : analysisText);
+      
+      // Ensure all required fields are present
+      analysis = {
+        trustScore: parsedData.trustScore || 50,
+        category: parsedData.category || "Suspicious",
+        summary: parsedData.summary || "Content analyzed with partial results.",
+        authenticity: parsedData.authenticity || "Analysis completed.",
+        aiDetection: parsedData.aiDetection || "AI detection analysis performed.",
+        sources: parsedData.sources || ["Gemini Analysis"],
+        processingTime: parseFloat(processingTime),
+        sourcesChecked: parsedData.sourcesChecked || parsedData.sources?.length || 3,
+        confidence: parsedData.confidence || "Medium"
+      };
     } catch (e) {
       console.error('Failed to parse AI response:', analysisText);
       // Fallback response
       analysis = {
         trustScore: 50,
         category: "Suspicious",
-        summary: "Unable to fully verify content",
+        summary: "Unable to fully verify content. The AI analysis could not be properly parsed.",
         authenticity: "Analysis completed but results are uncertain",
         aiDetection: "Could not determine AI generation likelihood",
         sources: ["Gemini Analysis"],
-        processingTime: 2.5,
+        processingTime: parseFloat(processingTime),
         sourcesChecked: 1,
         confidence: "Low"
       };

@@ -18,12 +18,21 @@ export const useContentVerification = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const verifyContent = async (content: string, contentType: string): Promise<VerificationResult | null> => {
+  const verifyContent = async (
+    content: string, 
+    contentType: string, 
+    options?: { isBase64Image?: boolean; mimeType?: string }
+  ): Promise<VerificationResult | null> => {
     setIsLoading(true);
     
     try {
       const { data, error } = await supabase.functions.invoke('verify-content', {
-        body: { content, contentType }
+        body: { 
+          content, 
+          contentType,
+          isBase64Image: options?.isBase64Image || false,
+          mimeType: options?.mimeType || 'text/plain'
+        }
       });
 
       if (error) {

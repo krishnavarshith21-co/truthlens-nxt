@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Link as LinkIcon, FileText, Image, Video, Mic } from "lucide-react";
+import { Upload, Link as LinkIcon, FileText, Image, Video, Mic, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { useFirebaseVerification } from "@/hooks/useFirebaseVerification";
+import { useContentVerification } from "@/hooks/useContentVerification";
 import { useToast } from "@/hooks/use-toast";
 
 const VerificationSection = () => {
   const [textInput, setTextInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [selectedType, setSelectedType] = useState("text");
-  const { verifyContent, isLoading } = useFirebaseVerification();
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { verifyContent, isLoading } = useContentVerification();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -38,12 +39,20 @@ const VerificationSection = () => {
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        // Remove the data URL prefix to get just the base64 string
+        resolve(base64.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleAnalyze = async () => {
-    console.log('Analyze button clicked');
-    console.log('Text input:', textInput);
-    console.log('File:', file);
-    console.log('Selected type:', selectedType);
-    
     if (!textInput.trim() && !file) {
       toast({
         title: "Input Required",
@@ -53,23 +62,46 @@ const VerificationSection = () => {
       return;
     }
 
-    console.log('Starting verification...');
+    setIsAnalyzing(true);
+    
     toast({
-      title: "Analyzing Content",
-      description: "Please wait while we verify your content...",
+      title: "🔍 Analyzing Content",
+      description: file ? "AI is analyzing your image..." : "AI is verifying your content...",
     });
 
-    const result = await verifyContent(file || textInput, selectedType);
-    console.log('Verification result:', result);
-    
-    if (result) {
-      navigate('/result', { state: { result, content: file?.name || textInput } });
-    } else {
+    try {
+      let result;
+      
+      if (file && file.type.startsWith('image/')) {
+        // For images, convert to base64 and send with image flag
+        const base64Image = await fileToBase64(file);
+        result = await verifyContent(base64Image, selectedType, {
+          isBase64Image: true,
+          mimeType: file.type
+        });
+      } else {
+        // For text content
+        result = await verifyContent(textInput, selectedType);
+      }
+      
+      if (result) {
+        toast({
+          title: "✅ Analysis Complete",
+          description: "Content has been verified successfully!",
+        });
+        navigate('/result', { state: { result, content: file?.name || textInput.substring(0, 100) } });
+      } else {
+        throw new Error('No result returned');
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
       toast({
-        title: "Analysis Failed",
-        description: "Could not analyze the content. Please try again.",
+        title: "❌ Analysis Failed",
+        description: "Unable to analyze. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -107,8 +139,9 @@ const VerificationSection = () => {
                   <button
                     key={type.label}
                     onClick={() => setSelectedType(type.label)}
-                    className={`glass-card p-6 rounded-2xl hover:glow-primary transition-all duration-300 group ${
-                      selectedType === type.label ? 'ring-2 ring-primary' : ''
+                    disabled={isAnalyzing || isLoading}
+                    className={`glass-card p-6 rounded-2xl hover:glow-primary transition-all duration-300 group active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      selectedType === type.label ? 'ring-2 ring-primary bg-primary/10' : ''
                     }`}
                   >
                     <type.icon className={`w-8 h-8 mx-auto mb-3 ${type.color} group-hover:scale-110 transition-transform`} />
@@ -154,14 +187,26 @@ const VerificationSection = () => {
             <Button 
               size="lg"
               onClick={handleAnalyze}
-              disabled={isLoading || (!textInput.trim() && !file)}
-              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isAnalyzing || isLoading || (!textInput.trim() && !file)}
+              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              {isLoading ? 'Analyzing...' : 'Analyze Content'}
+              {isAnalyzing || isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                'Analyze Content'
+              )}
             </Button>
-            {!textInput.trim() && !file && !isLoading && (
+            {!textInput.trim() && !file && !isAnalyzing && !isLoading && (
               <p className="text-sm text-muted-foreground animate-pulse">
                 ↑ Upload a file or paste text above to enable analysis
+              </p>
+            )}
+            {(isAnalyzing || isLoading) && (
+              <p className="text-sm text-primary animate-pulse font-medium">
+                {file ? '🖼️ AI is analyzing your image...' : '📝 AI is verifying your content...'}
               </p>
             )}
           </div>
