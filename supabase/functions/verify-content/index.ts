@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.75.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +12,25 @@ serve(async (req) => {
   }
 
   try {
-    const { content, contentType, isBase64Image, mimeType } = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+
+    // Initialize Supabase client with user's auth
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    const { content, contentType, isBase64Image, mimeType, fileName } = await req.json();
     
     if (!content) {
       throw new Error('Content is required');
@@ -23,6 +42,39 @@ serve(async (req) => {
     }
 
     const startTime = Date.now();
+    let imageUrl = null;
+
+    // Upload image to Supabase Storage if it's a base64 image
+    if (isBase64Image && mimeType) {
+      const fileExt = mimeType.split('/')[1];
+      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+      
+      // Convert base64 to blob
+      const binaryString = atob(content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('verification-images')
+        .upload(filePath, bytes, {
+          contentType: mimeType,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw new Error('Failed to upload image');
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('verification-images')
+        .getPublicUrl(filePath);
+      
+      imageUrl = publicUrl;
+    }
 
     // Prepare message content based on type
     let userMessage;
@@ -134,7 +186,42 @@ serve(async (req) => {
       };
     }
 
-    return new Response(JSON.stringify(analysis), {
+    // Save verification to database
+    const { error: dbError } = await supabase
+      .from('verifications')
+      .insert({
+        user_id: user.id,
+        content_url: imageUrl,
+        content_type: contentType,
+        content_text: !isBase64Image ? content.substring(0, 500) : null,
+        trust_score: analysis.trustScore,
+        summary: analysis.summary,
+        detailed_explanation: analysis.authenticity,
+        is_ai_generated: analysis.category === 'Fake or AI-Generated',
+        related_articles: analysis.sources
+      });
+
+    if (dbError) {
+      console.error('Database insert error:', dbError);
+      // Don't fail the request if DB save fails
+    }
+
+    // Update user profile stats
+    await supabase
+      .from('profiles')
+      .select('total_verifications')
+      .eq('id', user.id)
+      .single()
+      .then(async ({ data: profile }) => {
+        if (profile) {
+          await supabase
+            .from('profiles')
+            .update({ total_verifications: (profile.total_verifications || 0) + 1 })
+            .eq('id', user.id);
+        }
+      });
+
+    return new Response(JSON.stringify({ ...analysis, imageUrl }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

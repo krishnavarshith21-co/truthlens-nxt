@@ -5,16 +5,22 @@ import Footer from "@/components/Footer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, isDemoMode } from "@/lib/firebase";
-import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
-import { Shield, Award, TrendingUp, History } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Shield, Award, TrendingUp, History, LogOut } from "lucide-react";
 import { LoadingScreen } from "@/components/LoadingScreen";
+
+interface UserProfile {
+  display_name: string | null;
+  total_verifications: number;
+  trust_points: number;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [verifications, setVerifications] = useState<any[]>([]);
-  const [stats, setStats] = useState({ trustScore: 0, verified: 0, badges: 0, points: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -24,105 +30,57 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
-      loadVerifications();
+      loadUserData();
     }
   }, [user]);
 
-  const loadVerifications = async () => {
+  const loadUserData = async () => {
     if (!user) return;
     
-    // Demo mode - use mock data
-    if (isDemoMode) {
-      const mockVerifications = [
-        {
-          id: '1',
-          content: 'AI-generated landscape image',
-          contentType: 'image',
-          result: { trustScore: 25, category: 'Fake or AI-Generated' },
-          createdAt: { toDate: () => new Date(Date.now() - 2 * 60 * 60 * 1000) }
-        },
-        {
-          id: '2',
-          content: 'News article about climate change',
-          contentType: 'text',
-          result: { trustScore: 92, category: 'Real & Verified' },
-          createdAt: { toDate: () => new Date(Date.now() - 5 * 60 * 60 * 1000) }
-        },
-        {
-          id: '3',
-          content: 'Social media video claim',
-          contentType: 'video',
-          result: { trustScore: 55, category: 'Suspicious' },
-          createdAt: { toDate: () => new Date(Date.now() - 24 * 60 * 60 * 1000) }
-        }
-      ];
-      
-      setVerifications(mockVerifications);
-      
-      const verified = mockVerifications.length;
-      const avgTrustScore = mockVerifications.reduce((acc, v) => acc + (v.result?.trustScore || 0), 0) / verified;
-      
-      setStats({
-        trustScore: Math.round(avgTrustScore),
-        verified,
-        badges: Math.floor(verified / 10) + 1,
-        points: verified * 50
-      });
-      return;
-    }
-    
-    // Real Firebase mode
-    if (!db) return;
-    
     try {
-      const q = query(
-        collection(db, 'verifications'),
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc'),
-        limit(5)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      const verificationsData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          result: data.result || { trustScore: 0, category: '' }
-        };
-      });
-      
-      setVerifications(verificationsData);
-      
-      // Calculate stats
-      const verified = verificationsData.length;
-      const avgTrustScore = verificationsData.reduce((acc, v) => acc + (v.result?.trustScore || 0), 0) / (verified || 1);
-      
-      setStats({
-        trustScore: Math.round(avgTrustScore),
-        verified,
-        badges: Math.floor(verified / 10),
-        points: verified * 50
-      });
+      // Load profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      setProfile(profileData);
+
+      // Load recent verifications
+      const { data: verificationsData } = await supabase
+        .from('verifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      setVerifications(verificationsData || []);
     } catch (error) {
-      console.error('Error loading verifications:', error);
+      console.error('Error loading user data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
   };
 
-  if (authLoading) {
+  if (authLoading || isLoading) {
     return <LoadingScreen message="Loading your dashboard..." />;
   }
 
-  const getCategoryEmoji = (category: string) => {
-    if (category.includes('Real')) return '🟢';
-    if (category.includes('Suspicious')) return '🟠';
+  const getCategoryEmoji = (trustScore: number) => {
+    if (trustScore >= 70) return '🟢';
+    if (trustScore >= 40) return '🟠';
     return '🔴';
   };
+
+  const avgTrustScore = verifications.length > 0
+    ? Math.round(verifications.reduce((acc, v) => acc + (v.trust_score || 0), 0) / verifications.length)
+    : 0;
 
   return (
     <div className="min-h-screen">
@@ -133,11 +91,12 @@ const Dashboard = () => {
           <div className="flex justify-between items-center mb-12">
             <div>
               <h1 className="text-4xl font-bold mb-2">
-                Welcome back, <span className="text-gradient">{user?.email?.split('@')[0]}</span>
+                Welcome back, <span className="text-gradient">{profile?.display_name || user?.email?.split('@')[0]}</span>
               </h1>
               <p className="text-muted-foreground">Your verification dashboard</p>
             </div>
-            <Button variant="outline" onClick={handleSignOut}>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
               Sign Out
             </Button>
           </div>
@@ -150,8 +109,8 @@ const Dashboard = () => {
                   <Shield className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Trust Score</p>
-                  <p className="text-2xl font-bold">{stats.trustScore}%</p>
+                  <p className="text-sm text-muted-foreground">Avg Trust Score</p>
+                  <p className="text-2xl font-bold">{avgTrustScore}%</p>
                 </div>
               </div>
             </Card>
@@ -163,7 +122,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Verified</p>
-                  <p className="text-2xl font-bold">{stats.verified}</p>
+                  <p className="text-2xl font-bold">{profile?.total_verifications || 0}</p>
                 </div>
               </div>
             </Card>
@@ -175,7 +134,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Badges</p>
-                  <p className="text-2xl font-bold">{stats.badges}</p>
+                  <p className="text-2xl font-bold">{Math.floor((profile?.total_verifications || 0) / 10)}</p>
                 </div>
               </div>
             </Card>
@@ -187,7 +146,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Points</p>
-                  <p className="text-2xl font-bold">{stats.points}</p>
+                  <p className="text-2xl font-bold">{profile?.trust_points || 0}</p>
                 </div>
               </div>
             </Card>
@@ -195,31 +154,45 @@ const Dashboard = () => {
 
           {/* Recent Activity */}
           <Card className="glass-card p-8">
-            <h2 className="text-2xl font-bold mb-6">Recent Verifications</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Recent Verifications</h2>
+              <Button variant="outline" onClick={() => navigate('/history')}>
+                View All
+              </Button>
+            </div>
             <div className="space-y-4">
               {verifications.length > 0 ? verifications.map((verification) => (
-                <div key={verification.id} className="flex items-center justify-between p-4 rounded-xl bg-background/50">
-                  <div>
-                    <p className="font-medium">{verification.content?.slice(0, 50)}...</p>
+                <div key={verification.id} className="flex items-center justify-between p-4 rounded-xl bg-background/50 hover:bg-background/70 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-medium line-clamp-1">
+                      {verification.content_text?.slice(0, 60) || verification.content_url || 'Image verification'}
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      {verification.createdAt?.toDate?.()?.toLocaleString() || 'Recently'}
+                      {new Date(verification.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={
-                      verification.result?.trustScore > 70 ? 'text-trust-high' :
-                      verification.result?.trustScore > 40 ? 'text-trust-medium' :
+                  <div className="flex items-center gap-3">
+                    <span className={`text-lg font-semibold ${
+                      verification.trust_score >= 70 ? 'text-trust-high' :
+                      verification.trust_score >= 40 ? 'text-trust-medium' :
                       'text-trust-low'
-                    }>
-                      {verification.result?.trustScore}% Real
+                    }`}>
+                      {verification.trust_score}%
                     </span>
-                    <span className="text-2xl">{getCategoryEmoji(verification.result?.category || '')}</span>
+                    <span className="text-2xl">{getCategoryEmoji(verification.trust_score)}</span>
                   </div>
                 </div>
               )) : (
-                <p className="text-center text-muted-foreground py-8">
-                  No verifications yet. Start by verifying some content!
-                </p>
+                <div className="text-center py-12">
+                  <History className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
+                  <p className="text-lg font-medium mb-2">No verifications yet</p>
+                  <p className="text-muted-foreground mb-4">
+                    Start by verifying some content to build your history
+                  </p>
+                  <Button onClick={() => navigate('/#verify')}>
+                    Start Verifying
+                  </Button>
+                </div>
               )}
             </div>
           </Card>

@@ -6,12 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, signIn, signUp, signInWithGoogle, isDemoMode } = useAuth();
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,12 +28,20 @@ const Auth = () => {
     setLoading(true);
     
     try {
-      await signUp(email, password);
-      toast({
-        title: "Success",
-        description: "Account created successfully!"
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
       });
-      navigate("/dashboard");
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: "Check your email for the confirmation link.",
+      });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -48,7 +57,17 @@ const Auth = () => {
     setLoading(true);
     
     try {
-      await signIn(email, password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Welcome back!",
+        description: "Successfully signed in.",
+      });
       navigate("/dashboard");
     } catch (error: any) {
       toast({
@@ -63,16 +82,22 @@ const Auth = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await signInWithGoogle();
-      navigate("/dashboard");
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) throw error;
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive"
       });
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -88,12 +113,6 @@ const Auth = () => {
           <Shield className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-bold text-gradient">VeriFy.AI</h1>
         </div>
-
-        {isDemoMode && (
-          <div className="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-sm">
-            <p className="text-yellow-200">🎮 Demo Mode - Use any email/password to try the app!</p>
-          </div>
-        )}
 
         <Tabs defaultValue="signin" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">

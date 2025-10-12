@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useContentVerification } from "@/hooks/useContentVerification";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const VerificationSection = () => {
   const [textInput, setTextInput] = useState("");
@@ -16,6 +18,7 @@ const VerificationSection = () => {
   const { verifyContent, isLoading } = useContentVerification();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const contentTypes = [
     { icon: FileText, label: "text", color: "text-primary" },
@@ -53,6 +56,16 @@ const VerificationSection = () => {
   };
 
   const handleAnalyze = async () => {
+    if (!user) {
+      toast({
+        title: "🔐 Authentication Required",
+        description: "Please log in to analyze content",
+        variant: "destructive"
+      });
+      navigate('/auth');
+      return;
+    }
+
     if (!textInput.trim() && !file) {
       toast({
         title: "Input Required",
@@ -77,7 +90,8 @@ const VerificationSection = () => {
         const base64Image = await fileToBase64(file);
         result = await verifyContent(base64Image, selectedType, {
           isBase64Image: true,
-          mimeType: file.type
+          mimeType: file.type,
+          fileName: file.name
         });
       } else {
         // For text content

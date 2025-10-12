@@ -21,7 +21,7 @@ export const useContentVerification = () => {
   const verifyContent = async (
     content: string, 
     contentType: string, 
-    options?: { isBase64Image?: boolean; mimeType?: string }
+    options?: { isBase64Image?: boolean; mimeType?: string; fileName?: string }
   ): Promise<VerificationResult | null> => {
     setIsLoading(true);
     
@@ -31,7 +31,8 @@ export const useContentVerification = () => {
           content, 
           contentType,
           isBase64Image: options?.isBase64Image || false,
-          mimeType: options?.mimeType || 'text/plain'
+          mimeType: options?.mimeType || 'text/plain',
+          fileName: options?.fileName || 'file'
         }
       });
 
@@ -43,9 +44,29 @@ export const useContentVerification = () => {
         throw new Error('No data returned from verification');
       }
 
+      // Update user profile stats
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('total_verifications, trust_points')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          await supabase
+            .from('profiles')
+            .update({ 
+              total_verifications: (profile.total_verifications || 0) + 1,
+              trust_points: (profile.trust_points || 0) + data.trustScore
+            })
+            .eq('id', user.id);
+        }
+      }
+
       toast({
-        title: "Verification Complete",
-        description: "Content has been analyzed successfully",
+        title: "✅ Verification Complete",
+        description: "Content has been analyzed and saved successfully",
       });
 
       return data as VerificationResult;
