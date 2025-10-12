@@ -141,7 +141,46 @@ export const VoiceAssistant = () => {
   }, [toast, location.pathname]);
 
 
-  const toggleListening = () => {
+  const requestMicrophonePermission = async () => {
+    try {
+      // Request microphone access first
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stop the stream immediately - we just needed permission
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (error: any) {
+      console.error('Microphone permission error:', error);
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        toast({
+          title: "Microphone Permission Required",
+          description: "Please allow microphone access in your browser settings to use voice assistant.",
+          variant: "destructive"
+        });
+      } else if (error.name === 'NotFoundError') {
+        toast({
+          title: "No Microphone Found",
+          description: "Please connect a microphone to use voice assistant.",
+          variant: "destructive"
+        });
+      } else if (error.name === 'NotReadableError') {
+        toast({
+          title: "Microphone In Use",
+          description: "Your microphone is being used by another application. Please close it and try again.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Microphone Error",
+          description: "Could not access microphone. Please check your device settings.",
+          variant: "destructive"
+        });
+      }
+      return false;
+    }
+  };
+
+  const toggleListening = async () => {
     if (!isSupported || !recognition) {
       toast({
         title: "Not Supported",
@@ -156,6 +195,12 @@ export const VoiceAssistant = () => {
       window.speechSynthesis.cancel();
       setIsListening(false);
     } else {
+      // Request microphone permission first
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        return;
+      }
+
       try {
         recognition.start();
         setIsListening(true);

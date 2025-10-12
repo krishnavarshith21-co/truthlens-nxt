@@ -39,18 +39,37 @@ const VerificationSection = () => {
   };
 
   const handleAnalyze = async () => {
+    console.log('Analyze button clicked');
+    console.log('Text input:', textInput);
+    console.log('File:', file);
+    console.log('Selected type:', selectedType);
+    
     if (!textInput.trim() && !file) {
       toast({
-        title: "Error",
-        description: "Please enter content or upload a file",
+        title: "Input Required",
+        description: "Please upload a file or paste text/link to analyze",
         variant: "destructive"
       });
       return;
     }
 
+    console.log('Starting verification...');
+    toast({
+      title: "Analyzing Content",
+      description: "Please wait while we verify your content...",
+    });
+
     const result = await verifyContent(file || textInput, selectedType);
+    console.log('Verification result:', result);
+    
     if (result) {
       navigate('/result', { state: { result, content: file?.name || textInput } });
+    } else {
+      toast({
+        title: "Analysis Failed",
+        description: "Could not analyze the content. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -131,15 +150,20 @@ const VerificationSection = () => {
           </Tabs>
 
           {/* Action Button */}
-          <div className="mt-8 flex justify-center">
+          <div className="mt-8 flex flex-col items-center gap-3">
             <Button 
               size="lg"
               onClick={handleAnalyze}
               disabled={isLoading || (!textInput.trim() && !file)}
-              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 disabled:opacity-50"
+              className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Analyzing...' : 'Analyze Content'}
             </Button>
+            {!textInput.trim() && !file && !isLoading && (
+              <p className="text-sm text-muted-foreground animate-pulse">
+                ↑ Upload a file or paste text above to enable analysis
+              </p>
+            )}
           </div>
         </Card>
 
