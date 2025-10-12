@@ -3,6 +3,7 @@ import { Mic, MicOff } from 'lucide-react';
 import { Button } from './ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from './ui/alert-dialog';
 
 export const VoiceAssistant = () => {
   const [isListening, setIsListening] = useState(false);
@@ -10,6 +11,7 @@ export const VoiceAssistant = () => {
   const [isSupported, setIsSupported] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micPermission, setMicPermission] = useState<'granted' | 'prompt' | 'denied' | null>(null);
+  const [showPermissionHelp, setShowPermissionHelp] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,6 +129,14 @@ export const VoiceAssistant = () => {
             description: "Please allow microphone access to use voice assistant",
             variant: "destructive"
           });
+          setShowPermissionHelp(true);
+        } else if (event.error === 'audio-capture') {
+          toast({
+            title: "No Microphone Audio",
+            description: "Your browser could not capture audio. Check mic connection and permissions.",
+            variant: "destructive"
+          });
+          setShowPermissionHelp(true);
         }
       };
 
@@ -194,6 +204,17 @@ export const VoiceAssistant = () => {
       }
       return false;
     }
+  };
+  
+  const openMicSettings = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    try {
+      if (ua.includes('chrome') || ua.includes('edg')) {
+        window.open('chrome://settings/content/microphone', '_blank');
+      } else if (ua.includes('firefox')) {
+        window.open('about:preferences#privacy', '_blank');
+      }
+    } catch {}
   };
 
   const toggleListening = async () => {
@@ -285,10 +306,35 @@ export const VoiceAssistant = () => {
               >
                 Retry access
               </button>
+              <button
+                onClick={() => setShowPermissionHelp(true)}
+                className="underline text-sm hover:opacity-90"
+              >
+                Help
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      <AlertDialog open={showPermissionHelp} onOpenChange={setShowPermissionHelp}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enable your microphone</AlertDialogTitle>
+            <AlertDialogDescription>
+              1. Click the padlock icon near the address bar.
+              2. Open Site settings.
+              3. Set Microphone to "Allow" for this site.
+              4. Return here and reload the page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowPermissionHelp(false)}>Close</AlertDialogCancel>
+            <AlertDialogAction onClick={() => openMicSettings()}>Open settings</AlertDialogAction>
+            <AlertDialogAction onClick={() => window.location.reload()}>Reload</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
