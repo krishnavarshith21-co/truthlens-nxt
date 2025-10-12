@@ -9,6 +9,7 @@ export const VoiceAssistant = () => {
   const [recognition, setRecognition] = useState<any>(null);
   const [isSupported, setIsSupported] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [micPermission, setMicPermission] = useState<'granted' | 'prompt' | 'denied' | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -140,6 +141,19 @@ export const VoiceAssistant = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast, location.pathname]);
 
+  // Track browser microphone permission state
+  useEffect(() => {
+    const nav: any = navigator as any;
+    if (nav?.permissions?.query) {
+      try {
+        nav.permissions.query({ name: 'microphone' as any }).then((status: any) => {
+          setMicPermission(status.state);
+          status.onchange = () => setMicPermission(status.state);
+        }).catch(() => {/* ignore */});
+      } catch { /* ignore */ }
+    }
+  }, []);
+
 
   const requestMicrophonePermission = async () => {
     try {
@@ -147,23 +161,25 @@ export const VoiceAssistant = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // Stop the stream immediately - we just needed permission
       stream.getTracks().forEach(track => track.stop());
+      setMicPermission('granted');
       return true;
     } catch (error: any) {
       console.error('Microphone permission error:', error);
-      
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      const name = error?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMicPermission('denied');
         toast({
           title: "Microphone Permission Required",
           description: "Please allow microphone access in your browser settings to use voice assistant.",
           variant: "destructive"
         });
-      } else if (error.name === 'NotFoundError') {
+      } else if (name === 'NotFoundError') {
         toast({
           title: "No Microphone Found",
           description: "Please connect a microphone to use voice assistant.",
           variant: "destructive"
         });
-      } else if (error.name === 'NotReadableError') {
+      } else if (name === 'NotReadableError') {
         toast({
           title: "Microphone In Use",
           description: "Your microphone is being used by another application. Please close it and try again.",
@@ -255,6 +271,21 @@ export const VoiceAssistant = () => {
             <p className="text-sm font-medium">
               {isListening ? '🎤 Listening...' : '🔊 Speaking...'}
             </p>
+          </div>
+        )}
+
+        {/* Permission helper when blocked */}
+        {micPermission === 'denied' && !isListening && !isSpeaking && (
+          <div className="absolute bottom-full right-0 mb-2 bg-destructive text-destructive-foreground px-3 py-2 rounded-lg shadow-lg animate-fade-in">
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-medium">Microphone blocked for this site.</p>
+              <button
+                onClick={requestMicrophonePermission}
+                className="underline text-sm hover:opacity-90"
+              >
+                Retry access
+              </button>
+            </div>
           </div>
         )}
       </div>
