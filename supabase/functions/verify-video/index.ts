@@ -36,63 +36,96 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY is not configured');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured');
 
     const start = Date.now();
 
-    // Build the prompt and attempt multimodal reference to the video URL
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert deepfake and AI-media verification assistant. Given a short video, determine whether it appears real, suspicious, or AI-generated. Output strictly valid JSON.`
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: `Analyze this video and detect if it's AI-generated, a deepfake, or real. Return JSON with fields: trustScore (0-100), category (Real & Verified | Suspicious | Fake or AI-Generated), summary (1-2 sentences), authenticity, aiDetection, sources (array), sourcesChecked (number), confidence (High|Medium|Low).` },
-              // Attempt to pass media reference (some models can use remote URLs)
-              { type: 'image_url', image_url: { url: fileUrl } }
-            ]
-          }
-        ]
-      })
-    });
+    // Send video to Gemini API for analysis
+    const prompt = `
+Analyze this video for authenticity and detect whether it is AI-generated, deepfake, or real.
+Provide a clear trust score (0-100), authenticity label (Real & Verified, Suspicious, or Fake or AI-Generated), and detailed explanation.
+
+Return your response in JSON format with the following fields:
+- trustScore: number (0-100)
+- category: string (one of: "Real & Verified", "Suspicious", "Fake or AI-Generated")
+- summary: string (1-2 sentences)
+- authenticity: string (detailed authenticity assessment)
+- aiDetection: string (AI detection analysis)
+- sources: array of strings (verification sources)
+- sourcesChecked: number
+- confidence: string (High, Medium, or Low)
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                {
+                  fileData: {
+                    mimeType: mimeType,
+                    fileUri: fileUrl
+                  }
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
 
     if (!response.ok) {
-      const t = await response.text();
-      console.error('AI gateway error:', response.status, t);
-      return new Response(JSON.stringify({ error: 'AI analysis failed' }), {
+      const errorText = await response.text();
+      console.error('Gemini API error:', response.status, errorText);
+      return new Response(JSON.stringify({ error: `Gemini API request failed: ${errorText}` }), {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const json = await response.json();
-    const content = json.choices?.[0]?.message?.content as string | undefined;
-    if (!content) throw new Error('Empty AI response');
+    const aiText = json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
+    if (!aiText) throw new Error('Empty AI response from Gemini');
 
     let analysis: any;
     try {
-      const match = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/\{[\s\S]*\}/);
-      analysis = JSON.parse(match ? match[1] || match[0] : content);
+      // Try to extract JSON from the response
+      const jsonMatch = aiText.match(/```json\n([\s\S]*?)\n```/) || aiText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysis = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+      } else {
+        // If no JSON found, try to extract trust score from text
+        const scoreMatch = aiText.match(/(\d{1,3})%/);
+        const trustScore = scoreMatch ? parseInt(scoreMatch[1]) : 50;
+        
+        analysis = {
+          trustScore,
+          category: trustScore > 80 ? 'Real & Verified' : trustScore > 50 ? 'Suspicious' : 'Fake or AI-Generated',
+          summary: aiText.substring(0, 200),
+          authenticity: 'Analysis based on text response',
+          aiDetection: aiText,
+          sources: ['Gemini 1.5 Pro Analysis'],
+          sourcesChecked: 1,
+          confidence: trustScore > 70 ? 'High' : trustScore > 40 ? 'Medium' : 'Low'
+        };
+      }
     } catch (e) {
-      console.error('Failed to parse AI JSON:', content);
+      console.error('Failed to parse Gemini response:', aiText, e);
       analysis = {
         trustScore: 40,
         category: 'Suspicious',
-        summary: 'AI analysis unavailable or unstructured. Returning conservative assessment.',
+        summary: 'Unable to parse AI analysis. Returning conservative assessment.',
         authenticity: 'Uncertain',
-        aiDetection: 'Could not conclusively assess video frames',
-        sources: ['Model Heuristics'],
+        aiDetection: 'Could not conclusively assess video',
+        sources: ['Gemini Analysis'],
         sourcesChecked: 1,
         confidence: 'Low'
       };

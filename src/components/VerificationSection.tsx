@@ -95,13 +95,24 @@ const VerificationSection = () => {
           fileName: file.name
         });
       } else if (file && file.type.startsWith('video/')) {
-        // For videos, upload and invoke video verification function
+        // For videos, upload to videos bucket and invoke verification function
         const uploadedUrl = await uploadImage(file);
         if (!uploadedUrl) throw new Error('Video upload failed');
+        
+        toast({
+          title: "🎬 Uploading Video",
+          description: "Video uploaded. AI analysis starting...",
+        });
+        
         const { data, error } = await supabase.functions.invoke('verify-video', {
           body: { fileUrl: uploadedUrl, mimeType: file.type, fileName: file.name }
         });
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Video verification error:', error);
+          throw new Error(error.message || 'Video verification failed');
+        }
+        
         result = data;
       } else {
         // For text content

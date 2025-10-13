@@ -15,7 +15,7 @@ export const useImageUpload = () => {
       if (!user) {
         toast({
           title: "Authentication Required",
-          description: "Please log in to upload images",
+          description: "Please log in to upload files",
           variant: "destructive"
         });
         return null;
@@ -23,9 +23,13 @@ export const useImageUpload = () => {
 
       const fileExt = file.name.split('.').pop();
       const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+      
+      // Choose bucket based on file type
+      const isVideo = file.type.startsWith('video/');
+      const bucketName = isVideo ? 'videos' : 'verification-images';
 
       const { data, error } = await supabase.storage
-        .from('verification-images')
+        .from(bucketName)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
@@ -37,7 +41,7 @@ export const useImageUpload = () => {
       }
 
       const { data: { publicUrl } } = supabase.storage
-        .from('verification-images')
+        .from(bucketName)
         .getPublicUrl(filePath);
 
       return publicUrl;
