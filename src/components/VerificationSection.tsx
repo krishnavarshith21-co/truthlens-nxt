@@ -9,7 +9,7 @@ import { useContentVerification } from "@/hooks/useContentVerification";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-
+import { useImageUpload } from "@/hooks/useImageUpload";
 const VerificationSection = () => {
   const [textInput, setTextInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -19,6 +19,7 @@ const VerificationSection = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { uploadImage, isUploading } = useImageUpload();
   
   const contentTypes = [
     { icon: FileText, label: "text", color: "text-primary" },
@@ -79,7 +80,7 @@ const VerificationSection = () => {
     
     toast({
       title: "🔍 Analyzing Content",
-      description: file ? "AI is analyzing your image..." : "AI is verifying your content...",
+      description: file ? `AI is analyzing your ${selectedType}...` : "AI is verifying your content...",
     });
 
     try {
@@ -93,6 +94,15 @@ const VerificationSection = () => {
           mimeType: file.type,
           fileName: file.name
         });
+      } else if (file && file.type.startsWith('video/')) {
+        // For videos, upload and invoke video verification function
+        const uploadedUrl = await uploadImage(file);
+        if (!uploadedUrl) throw new Error('Video upload failed');
+        const { data, error } = await supabase.functions.invoke('verify-video', {
+          body: { fileUrl: uploadedUrl, mimeType: file.type, fileName: file.name }
+        });
+        if (error) throw error;
+        result = data;
       } else {
         // For text content
         result = await verifyContent(textInput, selectedType);
@@ -201,7 +211,7 @@ const VerificationSection = () => {
             <Button 
               size="lg"
               onClick={handleAnalyze}
-              disabled={isAnalyzing || isLoading || (!textInput.trim() && !file)}
+              disabled={isAnalyzing || isLoading || isUploading || (!textInput.trim() && !file)}
               className="bg-gradient-primary hover:opacity-90 text-lg px-12 py-6 rounded-2xl glow-primary transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {isAnalyzing || isLoading ? (
@@ -218,9 +228,9 @@ const VerificationSection = () => {
                 ↑ Upload a file or paste text above to enable analysis
               </p>
             )}
-            {(isAnalyzing || isLoading) && (
+            {(isAnalyzing || isLoading || isUploading) && (
               <p className="text-sm text-primary animate-pulse font-medium">
-                {file ? '🖼️ AI is analyzing your image...' : '📝 AI is verifying your content...'}
+                {file ? `Analyzing your ${selectedType}...` : 'Verifying your content...'}
               </p>
             )}
           </div>
